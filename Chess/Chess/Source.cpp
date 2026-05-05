@@ -483,14 +483,106 @@ void Game::switchTurn() {
 
 State Game::getStatus() const { return status; }
 
-void Game::updateStatus() {
-    // Stub: extend this to walk all active pieces of the opponent,
-    // call availableMoves() on each, and detect check / checkmate / stalemate.
-    cout << "[updateStatus] Not yet fully implemented.\n";
-}
-
 void Game::display() const {
     board.display();
     cout << "Turn: " << ((currentTurn == &white) ? "WHITE" : "BLACK")
         << "  |  Move #" << turnNumber << "\n";
 }
+
+// checks if a king of given color is under attack
+bool Game::isInCheck(Color color) {
+    // find the king's square
+    Square* kingSquare = nullptr;
+    Player& me = (color == WHITE) ? white : black;
+    for (int i = 0; i < me.getActiveCount(); i++) {
+        Piece* p = me.getActivePiece(i);
+        if (p->getType() == KING) {
+            kingSquare = p->getSquare();
+            break;
+        }
+    }
+    if (!kingSquare) return false;
+
+    // check if any enemy piece can reach the king
+    Player& enemy = (color == WHITE) ? black : white;
+    for (int i = 0; i < enemy.getActiveCount(); i++) {
+        MoveList moves = enemy.getActivePiece(i)->availableMoves(board);
+        if (moves.contains(kingSquare))
+            return true;
+    }
+    return false;
+}
+
+// checks if the given color has at least one legal move
+bool Game::hasAnyMoves(Color color) {
+    Player& me = (color == WHITE) ? white : black;
+    for (int i = 0; i < me.getActiveCount(); i++) {
+        MoveList moves = me.getActivePiece(i)->availableMoves(board);
+        if (moves.count > 0)
+            return true;
+    }
+    return false;
+}
+
+void Game::updateStatus() {
+    Color turn = currentTurn->getColor();
+    bool inCheck = isInCheck(turn);
+    bool hasMoves = hasAnyMoves(turn);
+
+    if (inCheck && !hasMoves)
+        status = CHECKMATE;
+    else if (!inCheck && !hasMoves)
+        status = STALEMATE;
+    else if (inCheck)
+        status = CHECK;
+    else
+        status = ONGOING;
+}
+
+//MOVE HISTORY FUNCTIONS
+
+MoveHistory::MoveHistory() : moveCount(0) {}
+
+void MoveHistory::recordMove(Piece* piece, Square* from, Square* to, bool isCapture, bool isCheck, bool isCheckmate) {
+    if (moveCount >= 500) return;
+
+    string notation = "";
+
+    // Piece letter (pawns have none)
+    char symbol = piece->getSymbol();
+    if (symbol != 'P' && symbol != 'p')
+        notation += toupper(symbol);
+
+    // Capture
+    if (isCapture) notation += "x";
+
+    // Destination
+    notation += to->getName();
+
+    // Check / Checkmate
+    if (isCheckmate)   notation += "#";
+    else if (isCheck)  notation += "+";
+
+    moves[moveCount++] = notation;
+}
+
+void MoveHistory::printHistory() const {
+    for (int i = 0; i < moveCount; i += 2) {
+        cout << (i / 2 + 1) << ". " << moves[i];
+        if (i + 1 < moveCount)
+            cout << "  " << moves[i + 1];
+        cout << "\n";
+    }
+}
+
+string MoveHistory::getLastMove() const {
+    if (moveCount == 0) return "";
+    return moves[moveCount - 1];
+}
+
+void MoveHistory::undoLast() {
+    if (moveCount > 0)
+        moves[--moveCount] = "";
+}
+
+int MoveHistory::getCount() const { return moveCount; }

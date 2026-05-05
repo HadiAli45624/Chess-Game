@@ -192,6 +192,19 @@ public:
     Piece* getCapturedPiece(int index) const;
 };
 
+//MOVE HISTORY
+class MoveHistory {
+    string moves[500];
+    int moveCount;
+public:
+    MoveHistory();
+    void recordMove(Piece* piece, Square* from, Square* to, bool isCapture, bool isCheck, bool isCheckmate);
+    void printHistory() const;
+    string getLastMove() const;
+    void undoLast();
+    int getCount() const;
+};
+
 // ─────────────────────────────────────────────
 //  GAME
 // ─────────────────────────────────────────────
@@ -202,7 +215,7 @@ class Game {
     Player* currentTurn;
     State   status;
     int     turnNumber;
-
+    MoveHistory history;
 public:
     Game();
 
@@ -211,4 +224,7 @@ public:
     State getStatus()    const;
     void  updateStatus();
     void  display()      const;
+
+    bool isInCheck(Color color);
+    bool hasAnyMoves(Color color);
 };
