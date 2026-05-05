@@ -615,7 +615,7 @@ bool Game::isInsufficientMaterial() {
     }
 
     return false;
-}
+}   
 
 void Game::updateStatus() {
     Color turn = currentTurn->getColor();
@@ -726,7 +726,7 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
         enemy.capturePiece(captured);
         isCapture = true;
     }
-
+    
     //fifty move rule
     if (isCapture || piece->getType() == PAWN)
         halfMoveClock = 0;
