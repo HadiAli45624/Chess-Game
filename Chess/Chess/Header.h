@@ -10,7 +10,7 @@ class Square;
 class Piece;
 class Player;
 
-enum State { ONGOING, CHECK, CHECKMATE, STALEMATE, DRAW };
+enum State { ONGOING, CHECK, CHECKMATE, STALEMATE, DRAW_FIFTY_MOVE, DRAW_INSUFFICIENT, DRAW_AGREEMENT };
 enum Color { WHITE, BLACK };
 enum PieceType { PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING };
 
@@ -244,6 +244,8 @@ public:
     bool hasAnyMoves(Color color);
 
 private:
+    int halfMoveClock;
     bool wouldLeaveKingInCheck(Square* from, Square* to, Color color);
     void handlePromotion(Square* sq, Color color, PieceType promotion);
+    bool isInsufficientMaterial();
 };

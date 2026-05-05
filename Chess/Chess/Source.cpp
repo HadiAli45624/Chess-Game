@@ -492,11 +492,26 @@ Piece* Player::getCapturedPiece(int i) const { return (i < capturedCount) ? capt
 // ═══════════════════════════════════════════════
 Game::Game()
     : white(WHITE), black(BLACK), currentTurn(&white),
-    status(ONGOING), turnNumber(0) {
+    status(ONGOING), turnNumber(0), halfMoveClock(0) {
 }
 
 void Game::start() {
     board.setupPieces();
+
+    // Register all pieces with their respective players
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            Square* sq = board.getSquare(r, c);
+            if (!sq->isEmpty()) {
+                Piece* p = sq->getPiece();
+                if (p->getColor() == WHITE)
+                    white.addPiece(p);
+                else
+                    black.addPiece(p);
+            }
+        }
+    }
+
     display();
 }
 
@@ -553,6 +568,55 @@ bool Game::hasAnyMoves(Color color) {
     return false;
 }
 
+bool Game::isInsufficientMaterial() {
+    int whiteCount = white.getActiveCount();
+    int blackCount = black.getActiveCount();
+
+    // King vs King
+    if (whiteCount == 1 && blackCount == 1)
+        return true;
+
+    // King + Bishop/Knight vs King
+    if (whiteCount == 2 && blackCount == 1) {
+        for (int i = 0; i < white.getActiveCount(); i++) {
+            PieceType t = white.getActivePiece(i)->getType();
+            if (t == BISHOP || t == KNIGHT)
+                return true;
+        }
+    }
+
+    if (blackCount == 2 && whiteCount == 1) {
+        for (int i = 0; i < black.getActiveCount(); i++) {
+            PieceType t = black.getActivePiece(i)->getType();
+            if (t == BISHOP || t == KNIGHT)
+                return true;
+        }
+    }
+
+    // King + Bishop vs King + Bishop (same square color)
+    if (whiteCount == 2 && blackCount == 2) {
+        Square* wBishopSq = nullptr;
+        Square* bBishopSq = nullptr;
+
+        for (int i = 0; i < white.getActiveCount(); i++)
+            if (white.getActivePiece(i)->getType() == BISHOP)
+                wBishopSq = white.getActivePiece(i)->getSquare();
+
+        for (int i = 0; i < black.getActiveCount(); i++)
+            if (black.getActivePiece(i)->getType() == BISHOP)
+                bBishopSq = black.getActivePiece(i)->getSquare();
+
+        if (wBishopSq && bBishopSq) {
+            bool wLight = (wBishopSq->getRow() + wBishopSq->getCol()) % 2 == 0;
+            bool bLight = (bBishopSq->getRow() + bBishopSq->getCol()) % 2 == 0;
+            if (wLight == bLight)
+                return true;
+        }
+    }
+
+    return false;
+}
+
 void Game::updateStatus() {
     Color turn = currentTurn->getColor();
     bool inCheck = isInCheck(turn);
@@ -562,6 +626,10 @@ void Game::updateStatus() {
         status = CHECKMATE;
     else if (!inCheck && !hasMoves)
         status = STALEMATE;
+    else if (halfMoveClock >= 100)
+        status = DRAW_FIFTY_MOVE;
+    else if (isInsufficientMaterial())
+        status = DRAW_INSUFFICIENT;
     else if (inCheck)
         status = CHECK;
     else
@@ -599,9 +667,21 @@ void Game::handlePromotion(Square* sq, Color color, PieceType promotion) {
 }
 
 bool Game::wouldLeaveKingInCheck(Square* from, Square* to, Color color) {
-    // Save state
     Piece* movingPiece = from->getPiece();
     Piece* capturedPiece = to->getPiece();
+
+    // Detect en passant: pawn moves diagonally to an empty square
+    Square* epSquare = nullptr;
+    Piece* epPawn = nullptr;
+    if (movingPiece && movingPiece->getType() == PAWN &&
+        from->getCol() != to->getCol() && capturedPiece == nullptr)
+    {
+        epSquare = board.getSquare(from->getRow(), to->getCol());
+        if (epSquare) {
+            epPawn = epSquare->getPiece();
+            epSquare->clearPiece();
+        }
+    }
 
     // Temporarily apply the move
     to->setPiece(movingPiece);
@@ -614,6 +694,10 @@ bool Game::wouldLeaveKingInCheck(Square* from, Square* to, Color color) {
     to->clearPiece();
     if (capturedPiece)
         to->setPiece(capturedPiece);
+
+    // Restore en passant pawn if removed
+    if (epSquare && epPawn)
+        epSquare->setPiece(epPawn);
 
     return inCheck;
 }
@@ -642,6 +726,12 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
         enemy.capturePiece(captured);
         isCapture = true;
     }
+
+    //fifty move rule
+    if (isCapture || piece->getType() == PAWN)
+        halfMoveClock = 0;
+    else
+        halfMoveClock++;
 
     // execute move
     to->setPiece(piece);
@@ -676,9 +766,16 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
         }
     }
 
-    // mark pawn double step
+    // reset en passant for all pawns of current color, then mark the double step
+    Player& me = (currentTurn->getColor() == WHITE) ? white : black;
+    for (int i = 0; i < me.getActiveCount(); i++) {
+        Piece* p = me.getActivePiece(i);
+        if (p->getType() == PAWN)
+            static_cast<Pawn*>(p)->setDoubleStepTurn(-1);
+    }
     if (piece->getType() == PAWN && abs(from->getRow() - to->getRow()) == 2)
         static_cast<Pawn*>(piece)->setDoubleStepTurn(turnNumber);
+
 
     // handle promotion
     bool isPromotion = false;
@@ -731,7 +828,15 @@ void Game::run() {
             continue;
         }
 
-        if (!makeMove(from, to)) {
+        Piece* movingPiece = from->getPiece();
+        PieceType promotion = QUEEN;
+        if (movingPiece && movingPiece->getType() == PAWN) {
+            int promotionRank = (movingPiece->getColor() == WHITE) ? 0 : 7;
+            if (to->getRow() == promotionRank)
+                promotion = input.getPromotion();
+        }
+
+        if (!makeMove(from, to, promotion)) {
             cout << "Illegal move, try again.\n";
             continue;
         }
@@ -748,6 +853,14 @@ void Game::run() {
             cout << "Stalemate! It's a draw.\n";
             break;
         }
+
+        if (status == DRAW_FIFTY_MOVE) {
+            display();
+            cout << "Draw by fifty move rule!\n";
+            break;
+        }
+
+
     }
 }
 
