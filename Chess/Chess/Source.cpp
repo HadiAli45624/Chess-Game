@@ -288,35 +288,59 @@ MoveList King::availableMoves(Board& board) const {
     // ── Castling ──────────────────────────────
     // Requires: King has not moved, target Rook has not moved,
     //           all squares between them are empty.
+    // ── Castling ──────────────────────────────
     if (!hasMoved()) {
         int backRank = (color == WHITE) ? 7 : 0;
 
-        // King-side (Rook on col 7, King lands on col 6)
-        Square* rookSq = board.getSquare(backRank, 7);
-        if (rookSq && !rookSq->isEmpty()) {
-            Piece* rook = rookSq->getPiece();
-            if (rook->getType() == ROOK &&
-                rook->getColor() == color &&
-                !rook->hasMoved() &&
-                board.getSquare(backRank, 5)->isEmpty() &&
-                board.getSquare(backRank, 6)->isEmpty())
-            {
-                moves.add(board.getSquare(backRank, 6));
+        // Helper: checks if a square is attacked by the enemy
+        // We do this by scanning all enemy moves
+        auto isAttacked = [&](Square* sq) -> bool {
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    Square* s = board.getSquare(r, c);
+                    if (!s->isEmpty() && s->getPiece()->getColor() != color) {
+                        MoveList attacks = s->getPiece()->availableMoves(board);
+                        if (attacks.contains(sq)) return true;
+                    }
+                }
             }
-        }
+            return false;
+            };
 
-        // Queen-side (Rook on col 0, King lands on col 2)
-        rookSq = board.getSquare(backRank, 0);
-        if (rookSq && !rookSq->isEmpty()) {
-            Piece* rook = rookSq->getPiece();
-            if (rook->getType() == ROOK &&
-                rook->getColor() == color &&
-                !rook->hasMoved() &&
-                board.getSquare(backRank, 1)->isEmpty() &&
-                board.getSquare(backRank, 2)->isEmpty() &&
-                board.getSquare(backRank, 3)->isEmpty())
-            {
-                moves.add(board.getSquare(backRank, 2));
+        // King must not currently be in check to castle
+        if (!isAttacked(board.getSquare(backRank, 4))) {
+
+            // King-side (king passes through col 5, lands on col 6)
+            Square* rookSq = board.getSquare(backRank, 7);
+            if (rookSq && !rookSq->isEmpty()) {
+                Piece* rook = rookSq->getPiece();
+                if (rook->getType() == ROOK &&
+                    rook->getColor() == color &&
+                    !rook->hasMoved() &&
+                    board.getSquare(backRank, 5)->isEmpty() &&
+                    board.getSquare(backRank, 6)->isEmpty() &&
+                    !isAttacked(board.getSquare(backRank, 5)) &&
+                    !isAttacked(board.getSquare(backRank, 6)))
+                {
+                    moves.add(board.getSquare(backRank, 6));
+                }
+            }
+
+            // Queen-side (king passes through col 3, lands on col 2)
+            rookSq = board.getSquare(backRank, 0);
+            if (rookSq && !rookSq->isEmpty()) {
+                Piece* rook = rookSq->getPiece();
+                if (rook->getType() == ROOK &&
+                    rook->getColor() == color &&
+                    !rook->hasMoved() &&
+                    board.getSquare(backRank, 1)->isEmpty() &&
+                    board.getSquare(backRank, 2)->isEmpty() &&
+                    board.getSquare(backRank, 3)->isEmpty() &&
+                    !isAttacked(board.getSquare(backRank, 3)) &&
+                    !isAttacked(board.getSquare(backRank, 2)))
+                {
+                    moves.add(board.getSquare(backRank, 2));
+                }
             }
         }
     }
