@@ -291,26 +291,11 @@ MoveList King::availableMoves(Board& board) const {
     // ── Castling ──────────────────────────────
     if (!hasMoved()) {
         int backRank = (color == WHITE) ? 7 : 0;
+        Color enemy = (color == WHITE) ? BLACK : WHITE;
 
-        // Helper: checks if a square is attacked by the enemy
-        // We do this by scanning all enemy moves
-        auto isAttacked = [&](Square* sq) -> bool {
-            for (int r = 0; r < 8; r++) {
-                for (int c = 0; c < 8; c++) {
-                    Square* s = board.getSquare(r, c);
-                    if (!s->isEmpty() && s->getPiece()->getColor() != color) {
-                        MoveList attacks = s->getPiece()->availableMoves(board);
-                        if (attacks.contains(sq)) return true;
-                    }
-                }
-            }
-            return false;
-            };
+        if (!board.isSquareAttackedBy(board.getSquare(backRank, 4), enemy)) {
 
-        // King must not currently be in check to castle
-        if (!isAttacked(board.getSquare(backRank, 4))) {
-
-            // King-side (king passes through col 5, lands on col 6)
+            // King-side
             Square* rookSq = board.getSquare(backRank, 7);
             if (rookSq && !rookSq->isEmpty()) {
                 Piece* rook = rookSq->getPiece();
@@ -319,14 +304,14 @@ MoveList King::availableMoves(Board& board) const {
                     !rook->hasMoved() &&
                     board.getSquare(backRank, 5)->isEmpty() &&
                     board.getSquare(backRank, 6)->isEmpty() &&
-                    !isAttacked(board.getSquare(backRank, 5)) &&
-                    !isAttacked(board.getSquare(backRank, 6)))
+                    !board.isSquareAttackedBy(board.getSquare(backRank, 5), enemy) &&
+                    !board.isSquareAttackedBy(board.getSquare(backRank, 6), enemy))
                 {
                     moves.add(board.getSquare(backRank, 6));
                 }
             }
 
-            // Queen-side (king passes through col 3, lands on col 2)
+            // Queen-side
             rookSq = board.getSquare(backRank, 0);
             if (rookSq && !rookSq->isEmpty()) {
                 Piece* rook = rookSq->getPiece();
@@ -336,8 +321,8 @@ MoveList King::availableMoves(Board& board) const {
                     board.getSquare(backRank, 1)->isEmpty() &&
                     board.getSquare(backRank, 2)->isEmpty() &&
                     board.getSquare(backRank, 3)->isEmpty() &&
-                    !isAttacked(board.getSquare(backRank, 3)) &&
-                    !isAttacked(board.getSquare(backRank, 2)))
+                    !board.isSquareAttackedBy(board.getSquare(backRank, 3), enemy) &&
+                    !board.isSquareAttackedBy(board.getSquare(backRank, 2), enemy))
                 {
                     moves.add(board.getSquare(backRank, 2));
                 }
@@ -451,6 +436,18 @@ void Board::display() const {
     cout << "    a  b  c  d  e  f  g  h\n\n";
 }
 
+bool Board::isSquareAttackedBy(Square* sq, Color attackerColor) {
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            Square* s = getSquare(r, c);
+            if (!s->isEmpty() && s->getPiece()->getColor() == attackerColor) {
+                MoveList attacks = s->getPiece()->availableMoves(*this);
+                if (attacks.contains(sq)) return true;
+            }
+        }
+    }
+    return false;
+}
 
 // ═══════════════════════════════════════════════
 //  PLAYER
@@ -615,7 +612,7 @@ bool Game::isInsufficientMaterial() {
     }
 
     return false;
-}   
+}
 
 void Game::updateStatus() {
     Color turn = currentTurn->getColor();
@@ -828,6 +825,25 @@ void Game::run() {
             continue;
         }
 
+        // draw offer: from and to are both nullptr
+        if (from == nullptr && to == nullptr) {
+            Color opponent = (currentTurn->getColor() == WHITE) ? BLACK : WHITE;
+            cout << ((opponent == WHITE) ? "WHITE" : "BLACK")
+                << " do you accept the draw? (y/n): ";
+            string response;
+            getline(cin, response);
+            if (response == "y" || response == "Y") {
+                status = DRAW_AGREEMENT;
+                display();
+                cout << "Draw by agreement!\n";
+                break;
+            }
+            else {
+                cout << "Draw offer declined.\n";
+                continue;
+            }
+        }
+
         Piece* movingPiece = from->getPiece();
         PieceType promotion = QUEEN;
         if (movingPiece && movingPiece->getType() == PAWN) {
@@ -867,14 +883,20 @@ void Game::run() {
 // InputHandler functions
 bool InputHandler::getMove(Board& board, Square*& from, Square*& to) {
     string input;
-    cout << "Enter move (e.g. e2 e4) or 'q' to quit: ";
+    cout << "Enter move (e.g. e2 e4), 'draw' to offer draw, or 'q' to quit: ";
     getline(cin, input);
 
-    if (input.size() < 5) return false;         // too short
     if (wantsQuit(input)) return false;
+    if (offersDraw(input)) {
+        from = nullptr;
+        to = nullptr;
+        return true;
+    }
 
-    string fromStr = input.substr(0, 2);         // "e2"
-    string toStr = input.substr(3, 2);         // "e4"
+    if (input.size() < 5) return false;
+
+    string fromStr = input.substr(0, 2);
+    string toStr = input.substr(3, 2);
 
     from = board.getSquare(fromStr);
     to = board.getSquare(toStr);
@@ -899,6 +921,10 @@ PieceType InputHandler::getPromotion() {
 
 bool InputHandler::wantsQuit(const string& input) {
     return input == "q" || input == "quit";
+}
+
+bool InputHandler::offersDraw(const string& input) {
+    return input == "draw" || input == "d";
 }
 
 //MOVE HISTORY FUNCTIONS

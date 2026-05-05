@@ -7,10 +7,10 @@ using namespace std;
 // Forward declarations
 class Board;
 class Square;
-class Piece;
+class Piece;    
 class Player;
 
-enum State { ONGOING, CHECK, CHECKMATE, STALEMATE, DRAW_FIFTY_MOVE, DRAW_INSUFFICIENT, DRAW_AGREEMENT};
+enum State { ONGOING, CHECK, CHECKMATE, STALEMATE, DRAW_FIFTY_MOVE, DRAW_INSUFFICIENT, DRAW_AGREEMENT };
 enum Color { WHITE, BLACK };
 enum PieceType { PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING };
 
@@ -159,6 +159,7 @@ public:
     Square* getSquare(const string& name);
 
     bool inBounds(int row, int col) const;
+    bool isSquareAttackedBy(Square* sq, Color attackerColor);
 
     void placePiece(Piece* piece, int row, int col);
     void removePiece(int row, int col);
@@ -216,6 +217,7 @@ public:
 
     // returns true if player wants to quit
     bool wantsQuit(const string& input);
+    bool offersDraw(const string& input);
 };
 
 // ─────────────────────────────────────────────
