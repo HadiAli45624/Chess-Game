@@ -1,5 +1,4 @@
 ﻿#pragma once
-
 #pragma once
 #include <iostream>
 #include <string>
@@ -205,6 +204,20 @@ public:
     int getCount() const;
 };
 
+// handles all player input, swap this out for Windows.h later
+class InputHandler {
+public:
+    // returns two squares from input like "e2 e4"
+    // returns false if input is invalid
+    bool getMove(Board& board, Square*& from, Square*& to);
+
+    // returns promotion choice from player
+    PieceType getPromotion();
+
+    // returns true if player wants to quit
+    bool wantsQuit(const string& input);
+};
+
 // ─────────────────────────────────────────────
 //  GAME
 // ─────────────────────────────────────────────
@@ -216,15 +229,21 @@ class Game {
     State   status;
     int     turnNumber;
     MoveHistory history;
+    InputHandler input;
 public:
     Game();
 
     void  start();
+    void run();
     void  switchTurn();
     State getStatus()    const;
     void  updateStatus();
     void  display()      const;
-
+    bool  makeMove(Square* from, Square* to, PieceType promotion = QUEEN);
     bool isInCheck(Color color);
     bool hasAnyMoves(Color color);
+
+private:
+    bool wouldLeaveKingInCheck(Square* from, Square* to, Color color);
+    void handlePromotion(Square* sq, Color color, PieceType promotion);
 };
