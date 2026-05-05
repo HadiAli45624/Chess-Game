@@ -44,3 +44,14 @@ class Player {
 	int activeCount;
 	int capturedCount;
 };
+
+class MoveHistory {
+	string moves[500];
+	int moveCount;
+public:
+	MoveHistory();
+	void recordMove(string move);
+	void printHistory();
+	string getLastMove();
+	void undoLast();
+};
