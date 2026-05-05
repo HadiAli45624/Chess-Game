@@ -599,9 +599,21 @@ void Game::handlePromotion(Square* sq, Color color, PieceType promotion) {
 }
 
 bool Game::wouldLeaveKingInCheck(Square* from, Square* to, Color color) {
-    // Save state
     Piece* movingPiece = from->getPiece();
     Piece* capturedPiece = to->getPiece();
+
+    // Detect en passant: pawn moves diagonally to an empty square
+    Square* epSquare = nullptr;
+    Piece* epPawn = nullptr;
+    if (movingPiece && movingPiece->getType() == PAWN &&
+        from->getCol() != to->getCol() && capturedPiece == nullptr)
+    {
+        epSquare = board.getSquare(from->getRow(), to->getCol());
+        if (epSquare) {
+            epPawn = epSquare->getPiece();
+            epSquare->clearPiece();
+        }
+    }
 
     // Temporarily apply the move
     to->setPiece(movingPiece);
@@ -614,6 +626,10 @@ bool Game::wouldLeaveKingInCheck(Square* from, Square* to, Color color) {
     to->clearPiece();
     if (capturedPiece)
         to->setPiece(capturedPiece);
+
+    // Restore en passant pawn if removed
+    if (epSquare && epPawn)
+        epSquare->setPiece(epPawn);
 
     return inCheck;
 }
