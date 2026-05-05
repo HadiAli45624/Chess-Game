@@ -612,7 +612,7 @@ bool Game::isInsufficientMaterial() {
     }
 
     return false;
-}   
+}
 
 void Game::updateStatus() {
     Color turn = currentTurn->getColor();
