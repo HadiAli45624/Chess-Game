@@ -517,9 +517,14 @@ bool Game::isInCheck(Color color) {
 bool Game::hasAnyMoves(Color color) {
     Player& me = (color == WHITE) ? white : black;
     for (int i = 0; i < me.getActiveCount(); i++) {
-        MoveList moves = me.getActivePiece(i)->availableMoves(board);
-        if (moves.count > 0)
-            return true;
+        Piece* piece = me.getActivePiece(i);
+        MoveList moves = piece->availableMoves(board);
+        for (int j = 0; j < moves.count; j++) {
+            Square* from = piece->getSquare();
+            Square* to = moves.get(j);
+            if (!wouldLeaveKingInCheck(from, to, color))
+                return true;
+        }
     }
     return false;
 }
@@ -537,6 +542,226 @@ void Game::updateStatus() {
         status = CHECK;
     else
         status = ONGOING;
+}
+
+// handles pawn promotion
+void Game::handlePromotion(Square* sq, Color color, PieceType promotion) {
+    Piece* newPiece = nullptr;
+
+    switch (promotion) {
+    case QUEEN:  newPiece = new Queen(color);  break;
+    case ROOK:   newPiece = new Rook(color);   break;
+    case BISHOP: newPiece = new Bishop(color); break;
+    case KNIGHT: newPiece = new Knight(color); break;
+    default:     newPiece = new Queen(color);  break; // default to queen
+    }
+
+    // remove old pawn, place new piece
+    Piece* oldPawn = sq->getPiece();
+    sq->setPiece(newPiece);
+
+    // update player's active pieces
+    Player& me = (color == WHITE) ? white : black;
+    for (int i = 0; i < me.getActiveCount(); i++) {
+        if (me.getActivePiece(i) == oldPawn) {
+            // swap pawn out, new piece in
+            me.capturePiece(oldPawn); // removes from active
+            me.addPiece(newPiece);    // adds new piece
+            break;
+        }
+    }
+
+    delete oldPawn;
+}
+
+bool Game::wouldLeaveKingInCheck(Square* from, Square* to, Color color) {
+    // Save state
+    Piece* movingPiece = from->getPiece();
+    Piece* capturedPiece = to->getPiece();
+
+    // Temporarily apply the move
+    to->setPiece(movingPiece);
+    from->clearPiece();
+
+    bool inCheck = isInCheck(color);
+
+    // Undo the move
+    from->setPiece(movingPiece);
+    to->clearPiece();
+    if (capturedPiece)
+        to->setPiece(capturedPiece);
+
+    return inCheck;
+}
+
+bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
+    if (!from || !to) return false;
+
+    Piece* piece = from->getPiece();
+    if (!piece) return false;
+
+    // must be current player's piece
+    if (piece->getColor() != currentTurn->getColor()) return false;
+
+    // check destination is in available moves
+    MoveList moves = piece->availableMoves(board);
+    if (!moves.contains(to)) return false;
+
+    // check move doesn't leave own king in check
+    if (wouldLeaveKingInCheck(from, to, currentTurn->getColor())) return false;
+
+    // capture enemy piece if present
+    bool isCapture = false;
+    if (!to->isEmpty()) {
+        Piece* captured = to->getPiece();
+        Player& enemy = (currentTurn->getColor() == WHITE) ? black : white;
+        enemy.capturePiece(captured);
+        isCapture = true;
+    }
+
+    // execute move
+    to->setPiece(piece);
+    from->clearPiece();
+    piece->incrementMoveCount();
+
+    // handle castling
+    if (piece->getType() == KING) {
+        int backRank = (piece->getColor() == WHITE) ? 7 : 0;
+        if (to->getCol() == 6) {
+            Square* rookFrom = board.getSquare(backRank, 7);
+            Square* rookTo = board.getSquare(backRank, 5);
+            rookTo->setPiece(rookFrom->getPiece());
+            rookFrom->clearPiece();
+        }
+        if (to->getCol() == 2) {
+            Square* rookFrom = board.getSquare(backRank, 0);
+            Square* rookTo = board.getSquare(backRank, 3);
+            rookTo->setPiece(rookFrom->getPiece());
+            rookFrom->clearPiece();
+        }
+    }
+
+    // handle en passant
+    if (piece->getType() == PAWN && from->getCol() != to->getCol() && !isCapture) {
+        Square* epSquare = board.getSquare(from->getRow(), to->getCol());
+        if (epSquare && !epSquare->isEmpty()) {
+            Player& enemy = (currentTurn->getColor() == WHITE) ? black : white;
+            enemy.capturePiece(epSquare->getPiece());
+            epSquare->clearPiece();
+            isCapture = true;
+        }
+    }
+
+    // mark pawn double step
+    if (piece->getType() == PAWN && abs(from->getRow() - to->getRow()) == 2)
+        static_cast<Pawn*>(piece)->setDoubleStepTurn(turnNumber);
+
+    // handle promotion
+    bool isPromotion = false;
+    if (piece->getType() == PAWN) {
+        int promotionRank = (piece->getColor() == WHITE) ? 0 : 7;
+        if (to->getRow() == promotionRank) {
+            handlePromotion(to, piece->getColor(), promotion);
+            isPromotion = true;
+        }
+    }
+
+    // update status and record move
+    updateStatus();
+
+    // build notation with promotion suffix
+    if (isPromotion) {
+        string promoChar = "=Q";
+        switch (promotion) {
+        case ROOK:   promoChar = "=R"; break;
+        case BISHOP: promoChar = "=B"; break;
+        case KNIGHT: promoChar = "=N"; break;
+        default:     promoChar = "=Q"; break;
+        }
+        // record manually with promotion suffix
+        string notation = to->getName() + promoChar;
+        if (status == CHECKMATE) notation += "#";
+        else if (status == CHECK) notation += "+";
+        history.recordMove(piece, from, to, isCapture,
+            status == CHECK, status == CHECKMATE);
+    }
+    else {
+        history.recordMove(piece, from, to, isCapture,
+            status == CHECK, status == CHECKMATE);
+    }
+
+    switchTurn();
+    return true;
+}
+
+void Game::run() {
+    start();
+    while (status == ONGOING || status == CHECK) {
+        display();
+
+        Square* from = nullptr;
+        Square* to = nullptr;
+
+        if (!input.getMove(board, from, to)) {
+            cout << "Invalid input, try again.\n";
+            continue;
+        }
+
+        if (!makeMove(from, to)) {
+            cout << "Illegal move, try again.\n";
+            continue;
+        }
+
+        if (status == CHECKMATE) {
+            display();
+            cout << ((currentTurn->getColor() == WHITE) ? "BLACK" : "WHITE")
+                << " wins by checkmate!\n";
+            break;
+        }
+
+        if (status == STALEMATE) {
+            display();
+            cout << "Stalemate! It's a draw.\n";
+            break;
+        }
+    }
+}
+
+// InputHandler functions
+bool InputHandler::getMove(Board& board, Square*& from, Square*& to) {
+    string input;
+    cout << "Enter move (e.g. e2 e4) or 'q' to quit: ";
+    getline(cin, input);
+
+    if (input.size() < 5) return false;         // too short
+    if (wantsQuit(input)) return false;
+
+    string fromStr = input.substr(0, 2);         // "e2"
+    string toStr = input.substr(3, 2);         // "e4"
+
+    from = board.getSquare(fromStr);
+    to = board.getSquare(toStr);
+
+    if (!from || !to) return false;
+    return true;
+}
+
+PieceType InputHandler::getPromotion() {
+    char input = ' ';
+    cout << "Promote to (Q = Queen, R = Rook, B = Bishop, N = Knight): ";
+    while (true) {
+        cin >> input;
+        input = toupper(input);
+        if (input == 'Q') return QUEEN;
+        else if (input == 'R') return ROOK;
+        else if (input == 'B') return BISHOP;
+        else if (input == 'N') return KNIGHT;
+        else cout << "Invalid, enter Q, R, B or N: ";
+    }
+}
+
+bool InputHandler::wantsQuit(const string& input) {
+    return input == "q" || input == "quit";
 }
 
 //MOVE HISTORY FUNCTIONS
