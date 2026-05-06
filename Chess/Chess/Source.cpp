@@ -769,25 +769,37 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
     piece->incrementMoveCount();
 
     // Handle castling
-    if (piece->getType() == KING) {
+    if (piece->getType() == KING && !piece->hasMoved()) {  // ← add hasMoved check here too
         int backRank = (piece->getColor() == WHITE) ? 7 : 0;
+
         if (to->getCol() == 6) {   // king-side
             Square* rookFrom = board.getSquare(backRank, 7);
-            Square* rookTo = board.getSquare(backRank, 5);
-            Piece* rook = rookFrom->getPiece();
-            rookTo->setPiece(rook);
-            rookFrom->clearPiece();
-            // FIX: increment rook's move count so hasMoved() returns true
-            rook->incrementMoveCount();
+            if (rookFrom && !rookFrom->isEmpty() &&
+                rookFrom->getPiece()->getType() == ROOK &&
+                rookFrom->getPiece()->getColor() == piece->getColor() &&
+                !rookFrom->getPiece()->hasMoved())   // ← verify rook hasn't moved
+            {
+                Square* rookTo = board.getSquare(backRank, 5);
+                Piece* rook = rookFrom->getPiece();
+                rookTo->setPiece(rook);
+                rookFrom->clearPiece();
+                rook->incrementMoveCount();
+            }
         }
+
         if (to->getCol() == 2) {   // queen-side
             Square* rookFrom = board.getSquare(backRank, 0);
-            Square* rookTo = board.getSquare(backRank, 3);
-            Piece* rook = rookFrom->getPiece();
-            rookTo->setPiece(rook);
-            rookFrom->clearPiece();
-            // FIX: increment rook's move count
-            rook->incrementMoveCount();
+            if (rookFrom && !rookFrom->isEmpty() &&
+                rookFrom->getPiece()->getType() == ROOK &&
+                rookFrom->getPiece()->getColor() == piece->getColor() &&
+                !rookFrom->getPiece()->hasMoved())   // ← verify rook hasn't moved
+            {
+                Square* rookTo = board.getSquare(backRank, 3);
+                Piece* rook = rookFrom->getPiece();
+                rookTo->setPiece(rook);
+                rookFrom->clearPiece();
+                rook->incrementMoveCount();
+            }
         }
     }
 
@@ -1060,3 +1072,45 @@ void MoveHistory::undoLast() {
 }
 
 int MoveHistory::getCount() const { return moveCount; }
+
+MoveList Game::getLegalMovesFrom(Square* from) {
+    MoveList legal;
+    if (!from || from->isEmpty()) return legal;
+    Piece* piece = from->getPiece();
+    if (piece->getColor() != currentTurn->getColor()) return legal;
+
+    MoveList candidates = piece->availableMoves(board);
+    for (int i = 0; i < candidates.count; i++) {
+        Square* to = candidates.get(i);
+        if (!wouldLeaveKingInCheck(from, to, currentTurn->getColor()))
+            legal.add(to);
+    }
+    return legal;
+}
+
+void Game::reset() {
+    // Destroy old board explicitly
+    board.~Board();
+    new (&board) Board();
+
+    // Reset players
+    white = Player(WHITE);
+    black = Player(BLACK);
+
+    // Reset game state
+    currentTurn = &white;
+    status = ONGOING;
+    turnNumber = 0;
+    halfMoveClock = 0;
+    history = MoveHistory();
+
+    start();
+}
+
+void Game::offersDraw() {
+    status = DRAW_AGREEMENT;
+}
+
+void Game::resign() {
+    status = RESIGNED;
+}

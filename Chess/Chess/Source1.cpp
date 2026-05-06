@@ -1,9 +1,8 @@
-#include "Header.h"
-
+#include "ChessGUI.h"
 
 int main() {
-	Game game;
-	game.run();
-
-	return 0;
+    Game    game;
+    ChessGUI gui(game);
+    gui.run();
+    return 0;
 }

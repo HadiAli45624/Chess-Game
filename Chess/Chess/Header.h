@@ -241,15 +241,28 @@ class Game {
 public:
     Game();
 
+    // ── Console interface ────────────────────
     void  start();
     void  run();
     void  switchTurn();
-    State getStatus()    const;
-    void  updateStatus();
     void  display()      const;
-    bool  makeMove(Square* from, Square* to, PieceType promotion = QUEEN);
-    bool  isInCheck(Color color);
-    bool  hasAnyMoves(Color color);
+
+    // ── Shared / GUI interface ───────────────
+    State    getStatus()       const;
+    void     updateStatus();
+    bool     makeMove(Square* from, Square* to, PieceType promotion = QUEEN);
+    bool     isInCheck(Color color);
+    bool     hasAnyMoves(Color color);
+    Color    getCurrentTurnColor() const { return currentTurn->getColor(); }
+    Board& getBoard() { return board; }
+    Player& getWhitePlayer() { return white; }
+    Player& getBlackPlayer() { return black; }
+    // Returns all legal destinations for the piece on 'from' (empty MoveList if none)
+    MoveList getLegalMovesFrom(Square* from);
+    // Convenience: reset to a fresh game
+    void     reset();
+    void offersDraw();
+    void resign();
 
 private:
     bool wouldLeaveKingInCheck(Square* from, Square* to, Color color);
