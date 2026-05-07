@@ -769,7 +769,8 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
     piece->incrementMoveCount();
 
     // Handle castling
-    if (piece->getType() == KING && !piece->hasMoved()) {  // ← add hasMoved check here too
+    //if (piece->getType() == KING && piece->hasMoved());
+    if (piece->getType() == KING && abs(from->getCol() - to->getCol()) == 2) {  // ← add hasMoved check here too
         int backRank = (piece->getColor() == WHITE) ? 7 : 0;
 
         if (to->getCol() == 6) {   // king-side
