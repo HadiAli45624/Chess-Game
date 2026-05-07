@@ -237,6 +237,7 @@ class Game {
     int          halfMoveClock;
     MoveHistory  history;
     InputHandler input;
+    bool lastMoveWasCapture = false;
 
 public:
     Game();
@@ -263,6 +264,7 @@ public:
     void     reset();
     void offersDraw();
     void resign();
+    bool wasLastMoveCapture() const { return lastMoveWasCapture; }
 
 private:
     bool wouldLeaveKingInCheck(Square* from, Square* to, Color color);

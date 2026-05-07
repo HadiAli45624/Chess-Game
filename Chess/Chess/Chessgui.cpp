@@ -27,6 +27,10 @@ ChessGUI::ChessGUI(Game& game)
         std::cerr << "Warning: could not load font — text will not render.\n";
 
     loadTextures();
+    if (captureBuffer.loadFromFile("sounds/capture.ogg"))
+        captureSound.emplace(captureBuffer);
+    else
+        std::cerr << "Failed to load capture sound!\n";
     legalMoves = MoveList();
     fontLoaded = loaded;
 }
@@ -143,7 +147,10 @@ void ChessGUI::handleBoardClick(int pixelX, int pixelY) {
     if (game.makeMove(from, clicked)) {
         lastFrom = from;
         lastTo = clicked;
+        if (game.wasLastMoveCapture() && captureSound.has_value())
+            captureSound->play();
     }
+
 }
 
 void ChessGUI::handlePromotionClick(int pixelX, int pixelY) {
@@ -178,6 +185,9 @@ void ChessGUI::handlePromotionClick(int pixelX, int pixelY) {
     if (game.makeMove(from, to, chosen)) {
         lastFrom = from;
         lastTo = to;
+        if (game.wasLastMoveCapture() && captureSound.has_value())
+            captureSound->play();
+
     }
 }
 
@@ -391,13 +401,29 @@ void ChessGUI::drawSidebar() {
     y += 6;
 
     State s = game.getStatus();
-    label(statusMessage(), s == CHECK ? sf::Color(255, 120, 120) : COLOR_TEXT_MAIN, 14);
+    sf::Color statusColor = COLOR_TEXT_MAIN;
+    if (s == CHECK)     statusColor = sf::Color(255, 120, 120);
+    if (s == CHECKMATE) statusColor = sf::Color(255, 80, 80);
+    label(statusMessage(), statusColor, 14);
     y += 4;
 
     if (s == ONGOING || s == CHECK) {
         string turnStr = (game.getCurrentTurnColor() == WHITE) ? "White to move" : "Black to move";
         label(turnStr, COLOR_TEXT_DIM, 13);
     }
+    else if (s == CHECKMATE) {
+        string winner = (game.getCurrentTurnColor() == WHITE) ? "Black wins!" : "White wins!";
+        label(winner, sf::Color(255, 200, 50), 13);
+    }
+    else if (s == STALEMATE || s == DRAW_FIFTY_MOVE ||
+        s == DRAW_INSUFFICIENT || s == DRAW_AGREEMENT) {
+        label("It's a draw", COLOR_TEXT_DIM, 13);
+    }
+    else if (s == RESIGNED) {
+        string winner = (game.getCurrentTurnColor() == WHITE) ? "Black wins!" : "White wins!";
+        label(winner, sf::Color(255, 200, 50), 13);
+    }
+
     y += 10;
 
     sf::RectangleShape hline(sf::Vector2f(SIDEBAR_WIDTH - 32, 1));
@@ -408,23 +434,47 @@ void ChessGUI::drawSidebar() {
 
     label("Captured", COLOR_TEXT_DIM, 12);
 
-    auto drawCaps = [&](Player& player, sf::Color capColor) {
-        string caps = "";
+    auto drawCaps = [&](Player& player) {
+        float capX = x;
+        float capY = y;
+        const float capSize = 24.f;  // small piece size
+
         for (int i = 0; i < player.getCapturedCount(); i++) {
             Piece* p = player.getCapturedPiece(i);
-            caps += pieceGlyph(p->getType(), p->getColor());
+
+            string key = "";
+            key += (p->getColor() == WHITE) ? 'w' : 'b';
+            switch (p->getType()) {
+            case PAWN:   key += 'P'; break;
+            case ROOK:   key += 'R'; break;
+            case KNIGHT: key += 'N'; break;
+            case BISHOP: key += 'B'; break;
+            case QUEEN:  key += 'Q'; break;
+            case KING:   key += 'K'; break;
+            }
+
+            auto it = pieceTextures.find(key);
+            if (it != pieceTextures.end()) {
+                sf::Sprite sprite(it->second);
+                sf::Vector2u texSize = it->second.getSize();
+                float scale = capSize / texSize.x;
+                sprite.setScale(sf::Vector2f(scale, scale));
+                sprite.setPosition(sf::Vector2f(capX, capY));
+                window.draw(sprite);
+                capX += capSize + 2.f;
+
+                // wrap to next line if too wide
+                if (capX + capSize > BOARD_SIZE + SIDEBAR_WIDTH - 10.f) {
+                    capX = x;
+                    capY += capSize + 2.f;
+                }
+            }
         }
-        if (!caps.empty()) {
-            sf::Text t(font, sf::String::fromUtf8(caps.begin(), caps.end()), 18);
-            t.setFillColor(capColor);
-            t.setPosition(sf::Vector2f(x, y));
-            window.draw(t);
-        }
-        y += lineH + 4;
+        y = capY + capSize + 6.f;
         };
 
-    drawCaps(game.getWhitePlayer(), COLOR_TEXT_MAIN);
-    drawCaps(game.getBlackPlayer(), COLOR_TEXT_DIM);
+    drawCaps(game.getWhitePlayer());
+    drawCaps(game.getBlackPlayer());
     y += 12;
 
     sf::RectangleShape hline2(sf::Vector2f(SIDEBAR_WIDTH - 32, 1));

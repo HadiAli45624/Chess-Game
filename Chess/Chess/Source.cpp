@@ -2,9 +2,7 @@
 #include <iostream>
 using namespace std;
 
-// ═══════════════════════════════════════════════
-//  MOVELIST
-// ═══════════════════════════════════════════════
+// MOVELIST FUNCTIONS
 MoveList::MoveList() : count(0) {
     for (int i = 0; i < MAX_MOVES; i++)
         squares[i] = nullptr;
@@ -28,9 +26,7 @@ bool MoveList::contains(Square* sq) const {
 }
 
 
-// ═══════════════════════════════════════════════
-//  PIECE  (base)
-// ═══════════════════════════════════════════════
+//PIECE FUNCTIONS
 Piece::Piece(Color color, PieceType type)
     : square(nullptr), color(color), type(type), moveCount(0) {}
 
@@ -44,9 +40,7 @@ void Piece::setSquare(Square* sq) { square = sq; }
 void Piece::incrementMoveCount() { moveCount++; }
 
 
-// ═══════════════════════════════════════════════
-//  PAWN
-// ═══════════════════════════════════════════════
+//PAWN
 Pawn::Pawn(Color color) : Piece(color, PAWN), doubleStepTurn(-1) {}
 
 char Pawn::getSymbol()                    const { return (color == WHITE) ? 'P' : 'p'; }
@@ -63,14 +57,12 @@ MoveList Pawn::availableMoves(Board& board) const {
     int col = square->getCol();
     int dir = (color == WHITE) ? -1 : 1;
 
-    // ── One step forward ──────────────────────
     int newRow = row + dir;
     if (board.inBounds(newRow, col)) {
         Square* front = board.getSquare(newRow, col);
         if (front->isEmpty()) {
             moves.add(front);
 
-            // ── Two steps forward from starting rank ──
             int startRow = (color == WHITE) ? 6 : 1;
             if (row == startRow) {
                 Square* twoFront = board.getSquare(row + 2 * dir, col);
@@ -848,14 +840,15 @@ bool Game::makeMove(Square* from, Square* to, PieceType promotion) {
         }
     }
 
-    updateStatus();
-
     // FIX: pass promotionSuffix to recordMove so notation is stored correctly
     history.recordMove(piece, from, to, isCapture,
         status == CHECK, status == CHECKMATE,
         promotionSuffix);
-
+    
+    lastMoveWasCapture = isCapture;
     switchTurn();
+
+    updateStatus();
     return true;
 }
 

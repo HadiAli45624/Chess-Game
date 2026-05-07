@@ -5,6 +5,7 @@
 #include "Header.h"
 #include <map>
 #include <string>
+#include <SFML/Audio.hpp>
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -86,4 +87,7 @@ private:
 
     std::map<std::string, sf::Texture> pieceTextures;
     void loadTextures();
+
+    sf::SoundBuffer captureBuffer;
+    std::optional<sf::Sound> captureSound;
 };
